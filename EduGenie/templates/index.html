@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EduGenie — Learning Assistant</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <main class="container">
+    <header class="hero">
+      <p class="eyebrow">AI LEARNING ASSISTANT</p>
+      <h1>EduGenie</h1>
+      <p>Ask, understand, practice, summarize, and build a learning path.</p>
+    </header>
+
+    <section class="card">
+      <label for="task">Choose a task</label>
+      <select id="task">
+        <option value="qa">Q&amp;A</option>
+        <option value="explain">Explain a Topic</option>
+        <option value="quiz">Generate Quiz</option>
+        <option value="summarize">Summarize</option>
+        <option value="learn">Recommend Learning Path</option>
+      </select>
+
+      <div id="levelWrap" class="hidden">
+        <label for="level">Current level</label>
+        <select id="level">
+          <option>beginner</option><option>intermediate</option><option>advanced</option>
+        </select>
+      </div>
+
+      <div id="countWrap" class="hidden">
+        <label for="count">Number of questions</label>
+        <input id="count" type="number" min="1" max="10" value="5" />
+      </div>
+
+      <label for="inputText">Your input</label>
+      <textarea id="inputText" rows="8" placeholder="Example: Explain the Pythagoras theorem simply."></textarea>
+      <button id="submitBtn">Generate</button>
+    </section>
+
+    <section id="status" class="status"></section>
+    <section id="result" class="result card hidden"></section>
+  </main>
+
+<script>
+const task = document.getElementById('task');
+const levelWrap = document.getElementById('levelWrap');
+const countWrap = document.getElementById('countWrap');
+const result = document.getElementById('result');
+const status = document.getElementById('status');
+const input = document.getElementById('inputText');
+
+function updateFields() {
+  levelWrap.classList.toggle('hidden', task.value !== 'learn');
+  countWrap.classList.toggle('hidden', task.value !== 'quiz');
+  const placeholders = {
+    qa: 'Example: Which is the largest ocean?',
+    explain: 'Example: Explain the Pythagoras theorem.',
+    quiz: 'Example: SQL SELECT queries',
+    summarize: 'Paste an educational passage here...',
+    learn: 'Example: Python programming'
+  };
+  input.placeholder = placeholders[task.value];
+}
+task.addEventListener('change', updateFields);
+updateFields();
+
+function escapeHtml(value) {
+  return String(value).replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+}
+function render(data) {
+  if (data.answer) result.innerHTML = `<h2>Answer</h2><p>${escapeHtml(data.answer)}</p>`;
+  else if (data.explanation) result.innerHTML = `<h2>Explanation</h2><p>${escapeHtml(data.explanation)}</p>`;
+  else if (data.summary) result.innerHTML = `<h2>Summary</h2><p>${escapeHtml(data.summary)}</p>`;
+  else if (data.quiz) {
+    result.innerHTML = '<h2>Quiz</h2>' + data.quiz.map((q,i) => `<article class="quiz"><h3>${i+1}. ${escapeHtml(q.question)}</h3><ol type="A">${q.options.map(o => `<li>${escapeHtml(o)}</li>`).join('')}</ol><p><strong>Answer:</strong> ${escapeHtml(q.correct_answer)}</p><p>${escapeHtml(q.explanation)}</p></article>`).join('');
+  } else if (data.recommendations) {
+    const r = data.recommendations;
+    result.innerHTML = `<h2>${escapeHtml(r.topic)} — ${escapeHtml(r.level)}</h2><p><strong>Goal:</strong> ${escapeHtml(r.goal)}</p><h3>Steps</h3><ol>${r.steps.map(s=>`<li>${escapeHtml(s)}</li>`).join('')}</ol><h3>Practice</h3><ul>${r.practice_ideas.map(s=>`<li>${escapeHtml(s)}</li>`).join('')}</ul><p><strong>Next level:</strong> ${escapeHtml(r.next_level)}</p>`;
+  } else result.textContent = JSON.stringify(data, null, 2);
+  result.classList.remove('hidden');
+}
+
+document.getElementById('submitBtn').addEventListener('click', async () => {
+  const text = input.value.trim();
+  if (!text) { status.textContent = 'Please enter some input.'; return; }
+  status.textContent = 'EduGenie is thinking...';
+  result.classList.add('hidden');
+  let url, body;
+  if (task.value === 'qa') { url='/qa'; body={text}; }
+  if (task.value === 'explain') { url='/explain'; body={text}; }
+  if (task.value === 'summarize') { url='/summarize'; body={text}; }
+  if (task.value === 'quiz') { url='/quiz'; body={topic:text, count:Number(document.getElementById('count').value)}; }
+  if (task.value === 'learn') { url='/learn/recommendations'; body={topic:text, level:document.getElementById('level').value}; }
+  try {
+    const response = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || 'Request failed');
+    render(data);
+    status.textContent = 'Done.';
+  } catch (err) {
+    status.textContent = err.message;
+  }
+});
+</script>
+</body>
+</html>
